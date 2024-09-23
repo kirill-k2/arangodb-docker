@@ -1,0 +1,82 @@
+ARG BUILD_IMAGE=ubuntu:noble-20240827.1 
+
+# Stage 1: Prepare build image
+FROM $BUILD_IMAGE as builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PACKAGES_DEBIAN=" \
+    build-essential \ 
+    git-core \
+    libssl-dev \
+    libjemalloc-dev \
+    cmake \
+    python3 \
+    libldap2-dev \
+    pkg-config \
+    systemd-dev \
+    yarn \
+    libxml2-dev \
+    libsystemd-dev \
+    libbrotli-dev \
+    clang-16 \
+    lld-16 \
+    llvm-16 \
+    python3-pyqt-distutils \
+    python3-distutils-extra \
+"
+
+RUN mkdir -p /src/
+WORKDIR /src/
+
+RUN apt update -qq -y && \
+    apt upgrade -qq -y && \
+    apt install -qq -y wget gnupg $PACKAGES_DEBIAN && \
+    wget -qO- https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list && \
+    apt update -qq -y && \
+    apt install -qq -y yarn && \
+    apt clean
+
+# Stage 2: Build from sources
+FROM builder as build
+
+RUN mkdir -p /opt/ /src/arangodb
+WORKDIR /src/
+
+## Push sources
+RUN \
+    git config --global user.email "docker@build.none" && \
+    git config --global user.name "Docker Build" && \
+    git clone --single-branch --depth 1 https://github.com/arangodb/arangodb.git && \
+    cd arangodb && \
+    git submodule update --init
+
+WORKDIR /src/arangodb/
+
+RUN mkdir -p build
+WORKDIR /src/arangodb/build
+
+RUN cmake \
+    -DCPACK_BINARY_DEB=On \
+    -DPython_EXECUTABLE=/usr/bin/python \
+    -DPython3_EXECUTABLE=/usr/bin/python3 \
+    -DCMAKE_C_COMPILER=clang-16 \
+    -DCMAKE_CXX_COMPILER=clang++-16 \
+    -DCMAKE_C_COMPILER_AR="/usr/bin/llvm-ar-16" \
+    -DCMAKE_CXX_COMPILER_AR="/usr/bin/llvm-ar-16" \
+    -DCMAKE_C_COMPILER_RANLIB="/usr/bin/llvm-ranlib-16" \
+    -DCMAKE_CXX_COMPILER_RANLIB="/usr/bin/llvm-ranlib-16" \
+    -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld-16" \
+    -DUSE_GOOGLE_TESTS=off \
+    -DVERBOSE=On \
+    ..
+#    -DCMAKE_INSTALL_PREFIX=/opt \
+
+RUN make -j8
+
+RUN make packages
+
+RUN cpack -G DEB
+
+RUN mv /src/arangodb/build/*.deb /opt
+
