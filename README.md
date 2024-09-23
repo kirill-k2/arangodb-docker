@@ -1,8 +1,10 @@
-## ArangoDB docker build
+## ArangoDB docker builder
 
-Build of ArangoDB version 3.12 for Ubuntu 24.04 using docker
+Build deb packages of ArangoDB for Ubuntu 24.04 using docker
 
 See https://github.com/arangodb/arangodb
+
+Written for version 3.12
 
 ### Build
 
@@ -42,4 +44,3 @@ docker cp $(docker create --name tmp local/arangodb):/opt ./build/ && docker rm 
 - https://github.com/arangodb/arangodb/issues/20586#issuecomment-1924045115
 - http://jsteemann.github.io/blog/2014/10/16/how-to-compile-arangodb-from-source/ 
 - https://decovar.dev/blog/2021/09/23/cmake-cpack-package-deb-apt/
-
